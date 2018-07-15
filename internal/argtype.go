@@ -150,6 +150,10 @@ type ArgType struct {
 	// ShortNameTypeMap is the collection of Go style short names for types, mainly
 	// used for use with declaring a func receiver on a type.
 	ShortNameTypeMap map[string]string `arg:"-"`
+
+	// FieldConfigFile is the file path where yaml config file is used
+	// for table and foreign key fields
+	FieldConfig string `arg:"--field-config"`
 }
 
 // NewDefaultArgs returns the default arguments.
@@ -157,6 +161,7 @@ func NewDefaultArgs() *ArgType {
 	fkMode := FkModeSmart
 
 	return &ArgType{
+		FieldConfig:         "~/.config/xo.yaml",
 		Suffix:              ".xo.go",
 		Int32Type:           "int",
 		Uint32Type:          "uint",

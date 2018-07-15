@@ -254,41 +254,166 @@ func (tl TypeLoader) LoadSchema(args *ArgType) error {
 	}
 
 	// load procs
-	_, err = tl.LoadProcs(args)
-	if err != nil {
-		return err
-	}
+	// _, err = tl.LoadProcs(args)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// load tables
-	tableMap, err := tl.LoadRelkind(args, Table)
+	tableMap, err := tl.LoadCustomRelkind(args, Table, nil)
 	if err != nil {
 		return err
 	}
 
+	// tableMap, err := tl.LoadRelkind(args, Table)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// for k := range tableMap {
+	// 	fmt.Printf("table map before key: %s\n", k)
+	// }
+
 	// load views
-	viewMap, err := tl.LoadRelkind(args, View)
+	viewMap, err := tl.LoadCustomRelkind(args, View, nil)
 	if err != nil {
 		return err
 	}
+	// viewMap, err := tl.LoadRelkind(args, View)
+	// if err != nil {
+	// 	return err
+	// }
+
+	//fmt.Printf("viewmap: %s\n", viewMap)
+
+	// for k := range tableMap {
+	// 	fmt.Printf("view map before key: %s\n", k)
+	// }
 
 	// merge views with the tableMap
 	for k, v := range viewMap {
 		tableMap[k] = v
 	}
 
-	// load foreign keys
-	_, err = tl.LoadForeignKeys(args, tableMap)
+	// for _, v := range tableMap {
+	// 	fmt.Printf("key after: %s\n", v.Name)
+	// }
+
+	_, err = tl.LoadCustomRelkind(args, Table, tableMap)
+
 	if err != nil {
-		return err
+		panic(err)
 	}
+
+	//load foreign keys
+	// _, err = tl.LoadForeignKeys(args, tableMap)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// load indexes
-	_, err = tl.LoadIndexes(args, tableMap)
-	if err != nil {
-		return err
-	}
+	// _, err = tl.LoadIndexes(args, tableMap)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
+}
+
+func (tl TypeLoader) LoadCustomForeignKeys(args *ArgType, tableMap map[string]*Type) (map[string]*ForeignKey, error) {
+	var err error
+
+	fkMap := map[string]*ForeignKey{}
+	for _, t := range tableMap {
+		// load keys per table
+		err = tl.LoadTableForeignKeys(args, tableMap, t, fkMap)
+		if err != nil {
+			return nil, err
+		}
+
+		// fmt.Printf("Table name: %s\n", t.Name)
+		// fmt.Printf("foreign key: %s\n", fkMap)
+	}
+
+	// determine foreign key names
+	for _, fk := range fkMap {
+		fk.Name = args.ForeignKeyName(fkMap, fk)
+	}
+
+	return fkMap, nil
+}
+
+func (tl TypeLoader) LoadCustomRelkind(args *ArgType, relType RelType, customTableMap map[string]*Type) (map[string]*Type, error) {
+	//var err error
+
+	// tables
+	tableMap := make(map[string]*Type)
+
+	if customTableMap == nil {
+		// load tables
+		tableList, err := tl.TableList(args.DB, args.Schema, tl.Relkind(relType))
+		if err != nil {
+			return nil, err
+		}
+
+		for _, ti := range tableList {
+			// create template
+			typeTpl := &Type{
+				Name:    SingularizeIdentifier(ti.TableName),
+				Schema:  args.Schema,
+				RelType: relType,
+				Fields:  []*Field{},
+				Table:   ti,
+			}
+
+			// process columns
+			err = tl.LoadColumns(args, typeTpl)
+			if err != nil {
+				return nil, err
+			}
+
+			tableMap[ti.TableName] = typeTpl
+		}
+	} else {
+		foreignKeyMap, err := tl.LoadCustomForeignKeys(args, customTableMap)
+
+		if err != nil {
+			panic(err)
+		}
+
+		// generate table templates
+		for l, t := range customTableMap {
+			foreignKeyTables := make([]*ForeignKey, 0)
+			foreignKeyList := make([]string, 0)
+			for _, f := range foreignKeyMap {
+				if t.Name == f.Type.Name {
+					//fmt.Println(f.Field.Col.ColumnName)
+					foreignKeyList = append(foreignKeyList, f.RefType.Name)
+					foreignKeyTables = append(foreignKeyTables, f)
+					// exists := false
+					// for _, value := range foreignKeyList {
+					// 	if f.RefType.Name == value {
+					// 		exists = true
+					// 	}
+					// }
+
+					// if !exists {
+					// 	foreignKeyList = append(foreignKeyList, f.RefType.Name)
+					// 	foreignKeyTables = append(foreignKeyTables, f)
+					// }
+				}
+			}
+
+			customTableMap[l].ForeignTables = foreignKeyTables
+			err := args.ExecuteTemplate(TypeTemplate, t.Name, "", customTableMap[l])
+
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return tableMap, nil
 }
 
 // LoadEnums loads schema enums.
@@ -456,7 +581,6 @@ func (tl TypeLoader) LoadProcParams(args *ArgType, procTpl *Proc) error {
 	return nil
 }
 
-// LoadRelkind loads a schema table/view definition.
 func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Type, error) {
 	var err error
 
@@ -489,6 +613,7 @@ func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Ty
 
 	// generate table templates
 	for _, t := range tableMap {
+		// fmt.Printf("org template name: %s\n", t.Name)
 		err = args.ExecuteTemplate(TypeTemplate, t.Name, "", t)
 		if err != nil {
 			return nil, err
@@ -497,6 +622,48 @@ func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Ty
 
 	return tableMap, nil
 }
+
+// LoadRelkind loads a schema table/view definition.
+// func (tl TypeLoader) LoadRelkind(args *ArgType, relType RelType) (map[string]*Type, error) {
+// 	var err error
+
+// 	// load tables
+// 	tableList, err := tl.TableList(args.DB, args.Schema, tl.Relkind(relType))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	// tables
+// 	tableMap := make(map[string]*Type)
+// 	for _, ti := range tableList {
+// 		// create template
+// 		typeTpl := &Type{
+// 			Name:    SingularizeIdentifier(ti.TableName),
+// 			Schema:  args.Schema,
+// 			RelType: relType,
+// 			Fields:  []*Field{},
+// 			Table:   ti,
+// 		}
+
+// 		// process columns
+// 		err = tl.LoadColumns(args, typeTpl)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		tableMap[ti.TableName] = typeTpl
+// 	}
+
+// 	// generate table templates
+// 	for _, t := range tableMap {
+// 		err = args.ExecuteTemplate(TypeTemplate, t.Name, "", t)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+
+// 	return tableMap, nil
+// }
 
 // LoadColumns loads schema table/view columns.
 func (tl TypeLoader) LoadColumns(args *ArgType, typeTpl *Type) error {

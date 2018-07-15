@@ -9,6 +9,12 @@ import (
 	"github.com/knq/xo/models"
 )
 
+var (
+	exclusionList = []string{
+		"password",
+	}
+)
+
 // NewTemplateFuncs returns a set of template funcs bound to the supplied args.
 func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
@@ -32,7 +38,118 @@ func (a *ArgType) NewTemplateFuncs() template.FuncMap {
 		"hascolumn":          a.hascolumn,
 		"hasfield":           a.hasfield,
 		"getstartcount":      a.getstartcount,
+		"toCamelCaseJSON":    a.snakeToCamelJSON,
+		"convertType":        a.convertType,
+		"convertName":        a.convertName,
+		"jsonParser":         a.jsonParser,
+		"foreignDBName":      a.foreignDBName,
+		"foreignFieldName":   a.foreignFieldName,
 	}
+}
+
+func (a *ArgType) foreignFieldName(col string) string {
+	return snaker.SnakeToCamelJSON(col[:len(col)-2])
+}
+
+func (a *ArgType) foreignDBName(col string) string {
+	return col[:len(col)-3]
+}
+
+func (a *ArgType) jsonParser(s string, typ string) string {
+	for _, v := range exclusionList {
+		if v == s {
+			return "-"
+		}
+	}
+
+	if typ != "bool" {
+		return snaker.SnakeToCamelJSON(s) + ",omitempty"
+	}
+
+	return snaker.SnakeToCamelJSON(s)
+
+}
+
+func (a *ArgType) snakeToCamelJSON(s string) string {
+	word := snaker.SnakeToCamelJSON(s)
+
+	if word == "password" {
+		return "-"
+	}
+
+	return word
+}
+
+func (a *ArgType) convertName(name string) string {
+	lastLetter := name[len(name)-1:]
+
+	if lastLetter == "y" {
+		return name[:len(name)-1] + "ie"
+	}
+
+	if lastLetter == "s" {
+		return name[:len(name)-1] + "se"
+	}
+
+	return name
+}
+
+func (a *ArgType) convertType(typ string) string {
+	if typ == "sql.NullString" {
+		return "*string"
+	}
+
+	if typ == "pq.NullTime" {
+		return "*string"
+	}
+
+	if typ == "sql.NullFloat64" {
+		return "*float32"
+	}
+
+	if typ == "sql.NullInt64" {
+		return "*int"
+	}
+
+	if typ == "time.Time" {
+		return "string"
+	}
+
+	if typ == "sql.NullBool" {
+		return "*bool"
+	}
+
+	if typ == "Jsonb" {
+		return "queryutil.GeneralJSON"
+	}
+
+	return typ
+
+	// if typ == "sql.NullString" {
+	// 	return "null.String"
+	// }
+
+	// if typ == "pq.NullTime" {
+	// 	return "null.Time"
+	// }
+
+	// if typ == "sql.NullFloat64" {
+	// 	return "null.Float"
+	// }
+
+	// if typ == "sql.NullInt64" {
+	// 	return "null.Int"
+	// }
+
+	// // if typ == "time.Time" {
+	// // 	return "string"
+	// // }
+
+	// if typ == "sql.NullBool" {
+	// 	return "null.Bool"
+	// }
+
+	// return typ
 }
 
 // retype checks typ against known types, and prefixing

@@ -201,6 +201,25 @@ func processArgs(args *internal.ArgType) error {
 		}
 	}
 
+	// _, err = os.Stat(args.FieldConfig)
+
+	// if os.IsNotExist(err) {
+	// 	_, err = os.Create(args.FieldConfig)
+
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// }
+
+	// source, err := ioutil.ReadFile(args.FieldConfig
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// err = yaml.Unmarshal(source, &internal.FieldConf)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
 	return nil
 }
 

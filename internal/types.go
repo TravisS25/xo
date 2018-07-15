@@ -5,6 +5,9 @@ import "github.com/knq/xo/models"
 // TemplateType represents a template type.
 type TemplateType uint
 
+// FieldConf represents configuration used for table fields and foreign key references
+var FieldConf *FieldConfig
+
 // the order here will be the alter the output order per file.
 const (
 	EnumTemplate TemplateType = iota
@@ -126,6 +129,7 @@ type Type struct {
 	PrimaryKeyFields []*Field
 	Fields           []*Field
 	Table            *models.Table
+	ForeignTables    []*ForeignKey
 	Comment          string
 }
 
@@ -169,4 +173,9 @@ type Query struct {
 	Interpolate   bool
 	Type          *Type
 	Comment       string
+}
+
+type FieldConfig struct {
+	Exclusion        map[string][]string          `yaml:"exclusion"`
+	ForeignKeyConfig map[string]map[string]string `yaml:"foreign_key_config"`
 }
